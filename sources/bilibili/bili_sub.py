@@ -28,6 +28,7 @@ MIXIN = [46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5,
          20, 34, 44, 52]
 LANG_PREF = ["zh-CN", "zh-Hans", "zh", "ai-zh", "zh-Hant", "zh-TW", "zh-HK"]
 COOKIE = ""
+META = {}  # 搜索结果元数据，--list-only 时输出
 
 
 # ---------- HTTP ----------
@@ -99,14 +100,26 @@ def parse_bvid(s):
 
 def search(keyword, n, require=None):
     words = [w for w in (require or "").split(",") if w]
-    out, page = [], 1
+    out, page, retry = [], 1, 0
     while len(out) < n and page <= 5:
         d = api("/x/web-interface/wbi/search/type",
                 {"search_type": "video", "keyword": keyword, "page": page}, wbi=True)
+        if page == 1 and not d.get("result") and retry < 2:
+            retry += 1  # 未登录时首个请求偶尔被风控返回空结果，稍等重试
+            time.sleep(2)
+            continue
         for r in d.get("result") or []:
             title = re.sub(r"<[^>]+>", "", r.get("title", ""))
             if r.get("bvid") and (not words or any(w in title for w in words)):
                 out.append(r["bvid"])
+                META.setdefault(r["bvid"], {
+                    "bvid": r["bvid"], "title": title, "author": r.get("author", ""),
+                    "views": r.get("play") if isinstance(r.get("play"), int) else None,
+                    "duration": ":".join(x.zfill(2) if i else x for i, x in enumerate(str(r.get("duration", "")).split(":"))),
+                    "keyword": keyword,
+                    "pubdate": time.strftime("%Y-%m-%d", time.localtime(r["pubdate"])) if r.get("pubdate") else "",
+                    "cover": ("https:" + r["pic"]) if str(r.get("pic", "")).startswith("//") else r.get("pic", ""),
+                    "url": f"https://www.bilibili.com/video/{r['bvid']}"})
         if not d.get("result"):
             break
         page += 1
@@ -130,8 +143,12 @@ def srt_time(t):
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
 
-def safe(name, n=40):
-    return re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_")[:n]
+def safe(name, n=40, max_bytes=90):
+    """文件名里的标题部分：去掉非法字符，限 n 个字、max_bytes 字节（中文 3 字节/字），避免 Windows 260 路径上限。"""
+    s = re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_")[:n]
+    while len(s.encode("utf-8")) > max_bytes:
+        s = s[:-1]
+    return s.rstrip("_.") or "untitled"
 
 
 def fetch_video(bvid, outdir, lang=None, all_pages=False, formats=("json",)):
@@ -186,6 +203,7 @@ def main():
     ap.add_argument("--lang", help="指定字幕语言，如 zh-CN / ai-zh / en-US")
     ap.add_argument("--all-pages", action="store_true", help="多 P 视频下载全部分 P")
     ap.add_argument("--cookie-file", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".secrets", "bili_cookie.txt"))
+    ap.add_argument("--list-only", action="store_true", help="只搜索、输出候选视频列表（JSON），不下载字幕")
     ap.add_argument("--delay", type=float, default=1.5, help="视频间隔秒数，防风控（默认 1.5）")
     a = ap.parse_args()
 
@@ -207,6 +225,10 @@ def main():
         print(f"搜索「{kw}」得到 {len(found)} 个视频", file=sys.stderr)
         bvids += found
         time.sleep(a.delay)
+    if a.list_only:
+        json.dump([META.get(b, {"bvid": b}) for b in dict.fromkeys(bvids)], sys.stdout, ensure_ascii=False)
+        print()
+        return
     if not bvids:
         ap.error("请提供 BV 号/链接，或使用 --search")
 
