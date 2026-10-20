@@ -4,7 +4,7 @@
 用法：
     python3 build_map.py sh/plans.json sz/plans.json -o out.html
 
-读取一个或多个符合 SPEC「plans.json 数据契约」的文件，
+读取一个或多个符合 references/plans-schema.md 的 plans.json，
 为每段交通计算路线（OSRM / Overpass，带文件缓存），做数据检查，
 输出一个内嵌数据的单文件 HTML（MapLibre GL JS + OpenFreeMap 矢量瓦片）。
 """
@@ -24,7 +24,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-UA = "trip-shsz-maptool/1.0 (personal trip planner; contact jinyc2023666@outlook.com)"
+UA = "travel-agent-skill-maptool/1.0 (personal trip planner)"
 MAPLIBRE_VER = "5.24.0"
 
 MODES = {"walk", "taxi", "car", "bus", "metro", "tram", "train", "flight", "boat", "cable"}
@@ -438,7 +438,7 @@ def check_city(c, issues, radius_km):
         for k in ["id", "code", "name", "days", "cost"]:
             if k not in p:
                 issues.add("error", pid, f"方案缺少字段 {k}")
-        for pax in ("2", "4"):
+        for pax in [str(x) for x in (c.get("pax") or ["2", "4"])]:  # 人均按哪些人数算，默认 2 / 4 人
             cc = (p.get("cost") or {}).get(pax)
             if not cc:
                 issues.add("error", pid, f"cost 缺少 {pax} 人人均")

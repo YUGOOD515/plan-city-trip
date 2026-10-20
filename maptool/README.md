@@ -1,13 +1,11 @@
 # maptool · MapLibre 行程地图生成工具
 
-把一个或多个 `plans.json`（契约见 `../SPEC.md`）生成**单文件 HTML** 行程地图：MapLibre GL JS（CDN）+ OpenFreeMap 矢量底图（无需 key），数据内嵌，可直接作为 Notion 嵌入 / 附件。
+把一个或多个 `plans.json`（格式见 `../references/plans-schema.md`）生成**单文件 HTML** 行程地图：MapLibre GL JS（CDN）+ OpenFreeMap 矢量底图（无需 key），数据内嵌，可直接作为 Notion 嵌入 / 附件。
 
 ## 用法
 
 ```bash
-cd /data/trip_shsz
-python3 maptool/build_map.py sh/plans.json sz/plans.json -o out/map.html \
-  --title "上海还是深圳" --subtitle "10/22 周四午后出发，10/25 周日晚回武汉。"
+python3 maptool/build_map.py references/example.plans.json -o /tmp/map.html --inline-lib
 ```
 
 运行结束会打印路线统计和检查结果，并写一份 `<out>.report.md`。
@@ -27,7 +25,7 @@ python3 maptool/build_map.py sh/plans.json sz/plans.json -o out/map.html \
 截图自检（无头 Chromium + SwiftShader WebGL）：
 
 ```bash
-cd /data && node trip_shsz/maptool/shot.js trip_shsz/out/map.html trip_shsz/out/shot
+node maptool/shot.js /tmp/map.html /tmp/shot   # 需要 playwright
 ```
 
 依次输出 8 张图：桌面首屏、点站点 flyTo、第 2 天、全部、切第 2 个城市 + 4 人、整页、375 手机、深色模式；并打印高亮状态和页面报错（`errors` 应为空）。
@@ -49,15 +47,14 @@ cd /data && node trip_shsz/maptool/shot.js trip_shsz/out/map.html trip_shsz/out/
 
 ## 自动检查（报告 `<out>.report.md`）
 
-- error：坐标为空 / 为 0、经纬度颠倒、items 不是「站点→交通→站点」交替、首尾不是 stop、mode 非法、缺 cost.2 / cost.4、缺必填字段
+- error：坐标为空 / 为 0、经纬度颠倒、items 不是「站点→交通→站点」交替、首尾不是 stop、mode 非法、缺 `pax` 里任一人数的 cost、缺必填字段
 - warn：站点超出城市范围、单段步行 > 3 km、端点离路网 / 轨道 > 500 m（坐标可能不准，常见于机场、大公园质心）、路线长度 > 直线 3.2 倍、路由失败退回直线、metro 没写 line、时间倒序、cost 不是整数、酒店无坐标、`default_for` / `used_by` 引用不存在的方案
 - info：时间不是 HH:MM
 
-`sample/bad_plans.json` 故意包含上述错误，可用来回归测试：`python3 build_map.py sample/bad_plans.json -o /tmp/bad.html --offline`。
 
 ## 页面交互
 
-- 顶部：切换城市、2 人 / 4 人人均。
+- 顶部：切换城市、人数（`pax` 只有一个值时隐藏）。
 - 地图 + 右侧面板：切方案（显示人均，最省方案金色「最省」标）→ 切日期（含「全部」）→ 时间线。
 - 点时间线站点：地图 flyTo 并高亮该站；点交通段：缩放到该段并高亮；悬停交通段：地图同步高亮；点地图上的站点：时间线滚动到该站（必要时自动切到那一天）。
 - 同一地点多次到访合并为一个标记（如「3·5」）；方案住宿若不在站点里，显示「宿」标记。标签自动避让。

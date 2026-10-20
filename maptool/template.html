@@ -221,6 +221,7 @@ footer a{color:var(--ink-2)}
   .mr{grid-template-columns:88px minmax(0,1fr) 24px 48px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+.seg[hidden] { display: none !important; }
 </style>
 </head>
 <body data-acc="0">
@@ -233,7 +234,6 @@ footer a{color:var(--ink-2)}
     <div class="ctrls">
       <div class="seg" id="citySeg" role="group" aria-label="选择城市"></div>
       <div class="seg" id="paxSeg" role="group" aria-label="出行人数">
-        <button data-p="2" aria-pressed="true">2 人</button><button data-p="4" aria-pressed="false">4 人</button>
       </div>
     </div>
   </div>
@@ -272,7 +272,7 @@ footer a{color:var(--ink-2)}
 
   <section class="sec">
     <h2>住在哪</h2>
-    <p class="lede">三晚总价按一间房计；每人每晚按两人一间折算。</p>
+    <p class="lede" id="hotelLede">总价按一间房计；每人每晚按两人一间折算。</p>
     <div class="cols" id="hotels"></div>
   </section>
 
@@ -338,9 +338,12 @@ D.cities.forEach((c, ci) => {
     });
   });
 });
+const nightsLabel = c => (c.nights || 3) + ' 晚';
+const hotelTotal = h => h.price_total != null ? h.price_total : h.price_3n;
 const total = (p, pax) => { const c = (p.cost || {})[pax] || {}; return COST_KEYS.reduce((s, k) => s + (+c[k] || 0), 0); };
 
-const S = { ci: 0, pi: 0, day: 0, pax: '2', hot: null, hl: null };
+const PAX = (D.cities[0].pax || ['2', '4']).map(String);
+const S = { ci: 0, pi: 0, day: 0, pax: PAX[0], hot: null, hl: null };
 const city = () => D.cities[S.ci];
 const plan = () => city().plans[S.pi];
 
@@ -351,6 +354,9 @@ $('#sub').textContent = D.subtitle || (D.cities.length + ' 座城市、' + D.cit
 $('#citySeg').innerHTML = D.cities.map((c, i) => '<button data-c="'+i+'" aria-pressed="'+(i===0)+'">'+esc(c.name)+'</button>').join('');
 if (D.cities.length < 2) $('#citySeg').hidden = true;
 $('#citySeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setCity(+b.dataset.c); });
+$('#paxSeg').innerHTML = PAX.map((p, i) => '<button data-p="' + esc(p) + '" aria-pressed="' + (i === 0) + '">' + esc(p) + ' 人</button>').join('');
+if (PAX.length < 2) $('#paxSeg').hidden = true;
+{ const c0 = D.cities[0] || {}, n = c0.nights || 3, r = c0.room_size || 2; $('#hotelLede').textContent = n + ' 晚总价按一间房计；每人每晚按 ' + r + ' 人一间折算。'; }
 $('#paxSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.pax = b.dataset.p; [...$('#paxSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)); renderPlans(); renderFacts(); renderCmp(); renderTL(); });
 
 /* ---------- map ---------- */
@@ -722,8 +728,8 @@ function renderStatic() {
       '<tr><td>' + esc(x.type) + ' ' + esc(x.no) + '<small>' + esc(x.from) + ' → ' + esc(x.to) + (x.note ? ' · ' + esc(x.note) : '') + '</small></td><td class="tn">' + esc(x.time) + '</td><td class="r">¥' + fmt(x.price) + '</td><td class="r">' + pbadges(x.default_for, c._ci) + '</td></tr>').join('') : '';
     return '<div>' + hd(c) + '<table class="t"><thead><tr><th>班次</th><th>时间</th><th class="r">价格</th><th class="r">默认</th></tr></thead><tbody>' + grp('去程', t.go) + grp('回程', t.back) + '</tbody></table></div>';
   }).join('');
-  $('#hotels').innerHTML = D.cities.map(c => '<div>' + hd(c) + '<table class="t"><thead><tr><th>酒店</th><th class="r">评分</th><th class="r">三晚</th><th class="r">每人每晚</th><th class="r">方案</th></tr></thead><tbody>' +
-    (c.hotels || []).map(h => '<tr><td>' + esc(h.name) + '<small>' + esc([h.area, h.note].filter(Boolean).join(' · ')) + '</small></td><td class="r">' + (h.rating != null ? esc(h.rating) : '—') + '</td><td class="r">¥' + fmt(h.price_3n) + '</td><td class="r">¥' + fmt(h.price_3n / 6) + '</td><td class="r">' + pbadges(h.used_by, c._ci) + '</td></tr>').join('') + '</tbody></table></div>').join('');
+  $('#hotels').innerHTML = D.cities.map(c => '<div>' + hd(c) + '<table class="t"><thead><tr><th>酒店</th><th class="r">评分</th><th class="r">' + esc(nightsLabel(c)) + '</th><th class="r">每人每晚</th><th class="r">方案</th></tr></thead><tbody>' +
+    (c.hotels || []).map(h => '<tr><td>' + esc(h.name) + '<small>' + esc([h.area, h.note].filter(Boolean).join(' · ')) + '</small></td><td class="r">' + (h.rating != null ? esc(h.rating) : '—') + '</td><td class="r">¥' + fmt(hotelTotal(h)) + '</td><td class="r">¥' + fmt(hotelTotal(h) / ((c.nights || 3) * (c.room_size || 2))) + '</td><td class="r">' + pbadges(h.used_by, c._ci) + '</td></tr>').join('') + '</tbody></table></div>').join('');
   $('#vids').innerHTML = D.cities.map(c => {
     const ms = (c.mentions || []).slice().sort((a, b) => b.count - a.count).slice(0, 14), mx = Math.max(1, ...ms.map(m => m.count));
     const codes = (c.plans || []).map(p => p.code);
