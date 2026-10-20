@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__ · 行程地图</title>
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+<!--INLINE_CSS-->
+<style>
+:root{
+  --bg:#FAFAFA;--surface:#FFFFFF;--ink:#15191D;--ink-2:#4E5761;--line:#E5E7EB;
+  --blue:#3E5C76;--green:#1F3D33;--gold:#B8913A;
+  --blue-2:#8EA5BA;--green-2:#7E9A8E;--mute:#C4C9CE;
+  --halo:rgba(255,255,255,.94);
+  --shadow:0 1px 2px rgba(21,25,29,.06),0 4px 16px rgba(21,25,29,.06);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC","Noto Sans SC","Microsoft YaHei",Arial,sans-serif;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--space-9:96px;
+  --acc:var(--blue);--acc-t:rgba(62,92,118,.10);--on-acc:#FFFFFF;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0E1113;--surface:#171B1E;--ink:#ECEDEE;--ink-2:#A9B0B7;--line:#2A2F34;
+  --blue:#7FA2C1;--green:#6FA48C;--gold:#D2AE5C;
+  --blue-2:#4C657B;--green-2:#46695A;--mute:#3E454B;
+  --halo:rgba(23,27,30,.92);
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  --acc-t:rgba(127,162,193,.16);--on-acc:#0E1113;
+}}
+body[data-acc="1"]{--acc:var(--green);--acc-t:rgba(31,61,51,.09)}
+@media (prefers-color-scheme:dark){body[data-acc="1"]{--acc-t:rgba(111,164,140,.16)}}
+body[data-acc="2"]{--acc:var(--gold);--acc-t:rgba(184,145,58,.12)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 var(--font)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:8px}
+.tn,time{font-variant-numeric:tabular-nums}
+.wrap{max-width:1280px;margin:0 auto;padding:0 var(--space-5)}
+h1,h2,h3,h4,p{margin:0}
+a{color:var(--blue)}
+/* header */
+.top{padding:var(--space-6) 0 var(--space-5)}
+.top-in{display:flex;gap:var(--space-5);align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:28px;line-height:1.3;font-weight:650}
+.sub{color:var(--ink-2);margin-top:var(--space-1);max-width:40em}
+.ctrls{display:flex;gap:var(--space-3);flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:var(--space-1)}
+.seg button{padding:var(--space-1) var(--space-4);border-radius:8px;color:var(--ink-2);font-size:14px;line-height:24px;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--acc);color:var(--on-acc)}
+/* stage */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 384px;height:680px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow)}
+.mapbox{position:relative;min-width:0;background:var(--bg)}
+#map{position:absolute;inset:0}
+.panel{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.cap{position:absolute;top:var(--space-3);left:var(--space-3);max-width:calc(100% - 72px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:var(--space-1) var(--space-3);font-size:13px;line-height:24px;pointer-events:none;z-index:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cap b{font-weight:600}
+.cap span{color:var(--ink-2);margin-left:var(--space-2)}
+.legend{position:absolute;left:var(--space-3);bottom:var(--space-3);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:var(--space-2) var(--space-3);font-size:12px;line-height:20px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);max-width:calc(100% - 160px);pointer-events:none;z-index:2}
+.legend .it{display:inline-flex;align-items:center;gap:var(--space-2);white-space:nowrap}
+.legend svg{width:28px;height:12px;overflow:visible}
+.legend svg path{fill:none}
+.legend .note{width:100%;font-size:11px;line-height:16px}
+.fitbtn{position:absolute;top:var(--space-3);right:var(--space-3);z-index:2;width:36px;height:36px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);color:var(--ink)}
+.fitbtn svg{width:16px;height:16px}
+.maplibregl-ctrl-top-right{top:52px!important}
+.maplibregl-ctrl-group{background:var(--surface)!important;border:1px solid var(--line);border-radius:12px!important;box-shadow:var(--shadow)!important;overflow:hidden}
+.maplibregl-ctrl-group button{width:34px!important;height:34px!important}
+.maplibregl-ctrl-group button+button{border-top:1px solid var(--line)!important}
+@media (prefers-color-scheme:dark){.maplibregl-ctrl-group button .maplibregl-ctrl-icon{filter:invert(1)}
+  .maplibregl-ctrl-attrib{background:rgba(23,27,30,.85)!important}.maplibregl-ctrl-attrib,.maplibregl-ctrl-attrib *{color:var(--ink-2)!important}
+  .maplibregl-ctrl-attrib-button{filter:invert(1)}}
+.maplibregl-ctrl-scale{background:transparent!important;border-color:var(--ink-2)!important;color:var(--ink-2)!important;font-size:10px!important}
+.mapmsg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;max-width:320px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:var(--space-3) var(--space-4);font-size:13px;line-height:1.7;color:var(--ink-2);display:none}
+.mapmsg.on{display:block}
+.mapmsg.toast{top:auto;bottom:var(--space-8);transform:translateX(-50%)}
+/* markers */
+.mk{position:relative;width:0;height:0;cursor:pointer}
+.mk .dot{position:absolute;left:0;top:0;transform:translate(-50%,-50%);min-width:24px;height:24px;padding:0 var(--space-1);border-radius:12px;background:var(--acc);color:var(--on-acc);border:2px solid var(--surface);font-size:12px;font-weight:650;line-height:20px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+.mk.sm .dot{min-width:12px;width:12px;height:12px;padding:0}
+.mk.dim{opacity:.45}
+.mk.dim .dot{background:var(--ink-2)}
+.mk.ht .dot{border-radius:6px;background:var(--surface);color:var(--ink);border:1.5px solid var(--ink-2);min-width:20px;height:20px;line-height:17px;font-size:11px;font-weight:600}
+.mk:hover .dot,.mk.hot .dot{transform:translate(-50%,-50%) scale(1.18)}
+.mk.hot .dot{box-shadow:0 0 0 6px var(--acc-t),0 1px 3px rgba(0,0,0,.25)}
+.mk.hot{z-index:5}
+.mk .lb{position:absolute;left:16px;top:-10px;white-space:nowrap;font-size:12px;line-height:16px;color:var(--ink);font-weight:550;
+  text-shadow:0 0 2px var(--halo),0 0 2px var(--halo),0 0 3px var(--halo),0 0 4px var(--halo);pointer-events:none}
+.mk.sm .lb{left:10px;top:-8px;font-weight:500;color:var(--ink-2)}
+.mk .lb small{display:block;font-size:11px;line-height:14px;color:var(--ink-2);font-weight:450;font-variant-numeric:tabular-nums}
+.mk .lb.hide{visibility:hidden}
+.mk.hot .lb{visibility:visible!important;font-weight:650}
+/* panel */
+.p-top{padding:var(--space-4) var(--space-4) 0}
+.plans{display:flex;flex-direction:column;gap:var(--space-1)}
+.pl-b{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:var(--space-3);align-items:center;text-align:left;padding:var(--space-2) var(--space-3);border-radius:12px;width:100%}
+.pl-b:hover{background:var(--bg)}
+.pl-b[aria-pressed="true"]{background:var(--acc-t)}
+.pl-b .cd{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:650;font-size:13px;border:1.5px solid var(--acc);color:var(--acc)}
+.pl-b[aria-pressed="true"] .cd{background:var(--acc);color:var(--on-acc)}
+.pl-b .nm{font-weight:600;font-size:14px;line-height:20px}
+.pl-b .th{display:block;color:var(--ink-2);font-size:12px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-b .pr{text-align:right;font-size:15px;font-weight:600;line-height:20px;font-variant-numeric:tabular-nums}
+.pl-b .pr small{display:block;font-size:11px;line-height:16px;color:var(--ink-2);font-weight:450}
+.tag-gold{display:inline-block;font-size:11px;line-height:16px;padding:0 var(--space-1);border-radius:4px;color:var(--gold);border:1px solid var(--gold);margin-left:var(--space-2);font-weight:600;vertical-align:1px}
+.facts{margin:var(--space-3) 0 0;padding:0 var(--space-1);display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 var(--space-3);font-size:13px;line-height:20px}
+.facts dt{color:var(--ink-2)}
+.facts dd{margin:0;min-width:0}
+.facts .cost{color:var(--ink-2);font-variant-numeric:tabular-nums}
+.facts .cost b{color:var(--ink);font-weight:600}
+.days{display:flex;gap:var(--space-1);margin:var(--space-3) calc(-1 * var(--space-4)) 0;padding:0 var(--space-4) var(--space-3);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.days button{flex:0 0 auto;max-width:136px;padding:var(--space-1) var(--space-3);border-radius:8px;font-size:13px;line-height:20px;color:var(--ink-2);border:1px solid var(--line);text-align:left}
+.days button span{display:block;font-size:11px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.days button[aria-pressed="true"]{border-color:var(--acc);color:var(--acc);background:var(--acc-t);font-weight:600}
+.tl{flex:1;overflow-y:auto;padding:var(--space-4) var(--space-4) var(--space-5);overscroll-behavior:contain}
+.dh{display:flex;align-items:baseline;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-2)}
+.dh h3{font-size:16px;font-weight:650;line-height:24px}
+.chip{font-size:12px;line-height:18px;color:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:0 var(--space-1);white-space:nowrap}
+ol.steps{list-style:none;margin:0;padding:0}
+.stp{display:grid;grid-template-columns:24px minmax(0,1fr);gap:var(--space-3);padding:var(--space-1) var(--space-2);margin:0 calc(-1 * var(--space-2));border-radius:12px;cursor:pointer}
+.stp:hover,.stp.hot{background:var(--bg)}
+.stp.hot{box-shadow:inset 2px 0 0 var(--acc)}
+.stp .n{width:24px;height:24px;margin-top:0;border-radius:12px;background:var(--acc);color:var(--on-acc);font-size:12px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.stp .hd{display:flex;gap:var(--space-2);align-items:baseline;flex-wrap:wrap;line-height:24px}
+.stp time{color:var(--ink-2);font-size:13px}
+.stp b{font-weight:600;font-size:14px}
+.stp p{color:var(--ink-2);font-size:13px;line-height:1.7}
+.hit{font-size:11px;line-height:16px;padding:0 var(--space-1);border-radius:4px;background:var(--acc-t);color:var(--acc);font-weight:600;white-space:nowrap}
+.lg{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-1) var(--space-2);margin:0 calc(-1 * var(--space-2));border-radius:8px;cursor:pointer;min-height:36px}
+.lg:hover,.lg.on{background:var(--bg)}
+.lg .rail-v{justify-self:center;align-self:stretch;width:0;border-left:2px solid var(--ink-2);margin:calc(-1 * var(--space-1)) 0}
+.lg.m-walk .rail-v{border-left:3px dotted var(--acc)}
+.lg.m-bus .rail-v{border-left:2px dashed var(--ink-2)}
+.lg.m-train .rail-v{border-left:3px dashed var(--ink)}
+.lg.m-flight .rail-v{border-left:2px dashed var(--ink-2)}
+.lg.m-boat .rail-v{border-left:2px dashed var(--blue)}
+.lg.m-cable .rail-v{border-left:2px dotted var(--ink)}
+.lg .tx{display:flex;align-items:center;gap:var(--space-2);font-size:13px;color:var(--ink-2);line-height:18px;flex-wrap:wrap}
+.lg .tx svg{width:16px;height:16px;flex:0 0 auto}
+.lg .km{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.lc{display:inline-block;min-width:20px;padding:0 var(--space-1);height:16px;line-height:16px;border-radius:4px;color:#fff;font-size:11px;font-weight:650;text-align:center;text-shadow:0 0 2px rgba(0,0,0,.35)}
+.ap-t{font-size:11px;color:var(--ink-2);border:1px dashed var(--ink-2);border-radius:4px;padding:0 var(--space-1);line-height:14px}
+.tips{margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--line)}
+.tips h4{margin:0 0 var(--space-1);font-size:13px;font-weight:600}
+.tips ul{margin:0;padding-left:1.2em;color:var(--ink-2);font-size:13px;line-height:1.7}
+.tips dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 var(--space-3);font-size:13px;line-height:1.7}
+.tips dt{color:var(--ink)}.tips dd{margin:0;color:var(--ink-2)}
+.dcard{display:block;width:100%;text-align:left;padding:var(--space-3);border:1px solid var(--line);border-radius:12px;margin-bottom:var(--space-2)}
+.dcard:hover{border-color:var(--acc);background:var(--acc-t)}
+.dcard .t{display:flex;gap:var(--space-2);align-items:baseline}
+.dcard .t b{font-size:14px;font-weight:600}
+.dcard .t span{font-size:12px;color:var(--ink-2)}
+.dcard .seq{font-size:13px;color:var(--ink);margin-top:var(--space-1);line-height:1.7}
+.dcard .seq i{font-style:normal;color:var(--ink-2);margin:0 var(--space-1)}
+.dcard .st{font-size:12px;color:var(--ink-2);margin-top:var(--space-1);font-variant-numeric:tabular-nums}
+/* sections */
+.sec{margin-top:var(--space-7)}
+.sec>h2{font-size:20px;font-weight:650;line-height:1.4}
+.lede{color:var(--ink-2);margin-top:var(--space-1);max-width:40em;font-size:14px}
+.cols{display:grid;grid-template-columns:repeat(var(--n,2),minmax(0,1fr));gap:var(--space-6);margin-top:var(--space-4)}
+.cols h3{font-size:15px;font-weight:650;margin-bottom:var(--space-2);display:flex;align-items:center;gap:var(--space-2)}
+.cols h3 i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.cmp{margin-top:var(--space-4);display:flex;flex-direction:column;gap:var(--space-1)}
+.crow{display:grid;grid-template-columns:176px minmax(0,1fr) 96px;gap:var(--space-4);align-items:center;padding:var(--space-2) var(--space-3);border-radius:12px;text-align:left;width:100%}
+.crow:hover{background:var(--surface)}
+.crow.cur{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.crow .lb2{font-size:14px;line-height:20px;min-width:0}
+.crow .lb2 b{font-weight:600}
+.crow .lb2 span{color:var(--ink-2);font-size:12px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.bar i+i{box-shadow:inset 1px 0 0 var(--surface)}
+.crow .tot{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;font-size:15px;line-height:20px}
+.crow .tot small{display:block;font-size:11px;color:var(--ink-2);font-weight:450}
+.ckey{display:flex;gap:var(--space-4);flex-wrap:wrap;margin:var(--space-3) var(--space-3) 0 calc(176px + var(--space-3) + var(--space-4));font-size:12px;color:var(--ink-2)}
+.ckey span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.ckey i{width:10px;height:10px;border-radius:2px;display:inline-block}
+table.t{width:100%;border-collapse:collapse;font-size:13px;line-height:20px}
+table.t th{text-align:left;font-weight:500;color:var(--ink-2);font-size:12px;padding:var(--space-1) var(--space-2) var(--space-1) 0;border-bottom:1px solid var(--line);white-space:nowrap}
+table.t td{padding:var(--space-2) var(--space-2) var(--space-2) 0;border-bottom:1px solid var(--line);vertical-align:top}
+table.t .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.t th.r{text-align:right}
+table.t td small{display:block;color:var(--ink-2);font-size:12px;line-height:18px}
+table.t tr.grp td{border-bottom:0;padding:var(--space-4) 0 0;font-weight:600;color:var(--ink);font-size:12px}
+.pb{display:inline-block;font-size:11px;line-height:16px;min-width:16px;text-align:center;border-radius:4px;border:1px solid var(--acc-c,var(--ink-2));color:var(--acc-c,var(--ink-2));margin-left:2px;font-weight:600}
+.mr{display:grid;grid-template-columns:112px minmax(0,1fr) 28px 56px;gap:var(--space-2);align-items:center;font-size:13px;line-height:24px}
+.mr .mn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mr .mb{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.mr .mb i{display:block;height:100%;border-radius:4px}
+.mr .mc{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.mr .mp{font-size:11px;letter-spacing:.08em;color:var(--ink-2);white-space:nowrap}
+.mr .mp b{color:var(--ink);font-weight:650}
+.mr .mp s{text-decoration:none;opacity:.3}
+.pit{margin:var(--space-3) 0 0;padding-left:1.2em;font-size:13px;color:var(--ink-2);line-height:1.7}
+.vlist{margin-top:var(--space-3);font-size:12px;color:var(--ink-2);line-height:1.7}
+.vlist a{color:var(--ink-2)}
+footer{margin:var(--space-7) 0 var(--space-6);padding-top:var(--space-4);border-top:1px solid var(--line);font-size:12px;color:var(--ink-2);line-height:1.8}
+footer p+p{margin-top:var(--space-1)}
+footer a{color:var(--ink-2)}
+/* responsive */
+@media (max-width:1279px){.stage{grid-template-columns:minmax(0,1fr) 360px}}
+@media (max-width:959px){
+  .stage{grid-template-columns:1fr;height:auto}
+  .mapbox{height:520px}
+  .panel{border-left:0;border-top:1px solid var(--line)}
+  .tl{overflow:visible}
+  .cols{grid-template-columns:1fr;gap:var(--space-6)}
+}
+@media (max-width:639px){
+  .wrap{padding:0 var(--space-4)}
+  .top{padding:var(--space-5) 0 var(--space-4)}
+  h1{font-size:22px}
+  .sub{font-size:14px}
+  .stage{margin:0 calc(-1 * var(--space-4));border-radius:0;border-left:0;border-right:0}
+  .mapbox{height:460px}
+  .legend{left:var(--space-2);right:var(--space-2);bottom:var(--space-2);max-width:none;font-size:11px;line-height:16px;gap:var(--space-1) var(--space-3);padding:var(--space-1) var(--space-2)}
+  .legend svg{width:20px}
+  .maplibregl-ctrl-bottom-right{bottom:56px}
+  .cap{font-size:12px}
+  .crow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"lb tot" "bar bar";gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-1)}
+  .crow .lb2{grid-area:lb}.crow .bar{grid-area:bar}.crow .tot{grid-area:tot}
+  .ckey{margin-left:var(--space-1)}
+  .mr{grid-template-columns:88px minmax(0,1fr) 24px 48px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body data-acc="0">
+<header class="top">
+  <div class="wrap top-in">
+    <div>
+      <h1 id="ttl"></h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="ctrls">
+      <div class="seg" id="citySeg" role="group" aria-label="选择城市"></div>
+      <div class="seg" id="paxSeg" role="group" aria-label="出行人数">
+        <button data-p="2" aria-pressed="true">2 人</button><button data-p="4" aria-pressed="false">4 人</button>
+      </div>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <section class="stage" id="stage" aria-label="路线地图">
+    <div class="mapbox">
+      <div id="map" role="region" aria-label="路线地图：拖动平移，按住 Ctrl 或 ⌘ 滚动缩放"></div>
+      <div class="cap" id="cap"></div>
+      <button class="fitbtn" id="fit" aria-label="回到整条路线" title="回到整条路线"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
+      <div class="legend" id="legend"></div>
+      <div class="mapmsg" id="mapmsg"></div>
+    </div>
+    <aside class="panel">
+      <div class="p-top">
+        <div class="plans" id="plans" role="group" aria-label="选择方案"></div>
+        <dl class="facts" id="facts"></dl>
+        <div class="days" id="days" role="group" aria-label="选择日期"></div>
+      </div>
+      <div class="tl" id="tl"></div>
+    </aside>
+  </section>
+
+  <section class="sec">
+    <h2>人均多少钱</h2>
+    <p class="lede" id="cmpLede"></p>
+    <div class="cmp" id="cmp"></div>
+    <div class="ckey" id="ckey"></div>
+  </section>
+
+  <section class="sec">
+    <h2>怎么去、怎么回</h2>
+    <p class="lede">单程每人价格。右侧字母是把这一班当作默认的方案。</p>
+    <div class="cols" id="trans"></div>
+  </section>
+
+  <section class="sec">
+    <h2>住在哪</h2>
+    <p class="lede">三晚总价按一间房计；每人每晚按两人一间折算。</p>
+    <div class="cols" id="hotels"></div>
+  </section>
+
+  <section class="sec">
+    <h2>攻略视频怎么说</h2>
+    <p class="lede">数字是该地点在多少个攻略视频里被提到，右边的字母是哪几套方案去了。</p>
+    <div class="cols" id="vids"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</main>
+
+<script id="data" type="application/json">__DATA__</script>
+<!--INLINE_JS-->
+<script>
+(function(){
+"use strict";
+const D = JSON.parse(document.getElementById('data').textContent);
+const COST_KEYS = ['往返交通','住宿','当地交通','门票项目','餐饮'];
+const COST_COLORS = ['var(--blue)','var(--green)','var(--blue-2)','var(--green-2)','var(--mute)'];
+const MODE_NAME = {walk:'步行',taxi:'打车',car:'自驾',bus:'公交',metro:'地铁',tram:'有轨电车',train:'火车',flight:'飞机',boat:'轮渡',cable:'索道'};
+const SCHEM = new Set(['train','flight','boat','cable']);
+const VER = '__MAPLIBRE_VER__';
+const LIBS = [
+  'https://cdn.jsdelivr.net/npm/maplibre-gl@'+VER+'/dist/',
+  'https://registry.npmmirror.com/maplibre-gl/'+VER+'/files/dist/',
+  'https://unpkg.com/maplibre-gl@'+VER+'/dist/'
+];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('zh-CN');
+const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
+const ICON = {
+  walk:'<path d="M9 3.2a1.2 1.2 0 1 0 0-.01M7.6 6.2 6 12.8M7.6 6.2l2.2 1.6 1.2 2.4M7.2 9.4l2.2 1.6.6 2.8M7.6 6.2 5.6 7.8 5 10"/>',
+  taxi:'<path d="M3 10.5V8.2l1.3-3h7.4L13 8.2v2.3M3 10.5h10M3 10.5v1.8M13 10.5v1.8M5 8.2h6"/><circle cx="5.2" cy="10.5" r=".2"/><circle cx="10.8" cy="10.5" r=".2"/>',
+  bus:'<rect x="3.5" y="2.5" width="9" height="10" rx="1.6"/><path d="M3.5 8h9M5.5 12.5v1.2M10.5 12.5v1.2"/>',
+  metro:'<rect x="4" y="2.5" width="8" height="9" rx="2"/><path d="M4 8h8M5.5 13.5l1.2-2M10.5 13.5l-1.2-2"/>',
+  train:'<rect x="4" y="2.5" width="8" height="9" rx="2"/><path d="M8 2.5v5.5M4 8h8M5 13.5l1.4-2M11 13.5l-1.4-2"/>',
+  flight:'<path d="M2.5 9.5 13.5 5M6 8l-1.6-3M8.5 7l2 5"/>',
+  boat:'<path d="M2.5 10.5h11l-1.5 2.5H4zM5 10.5V6h6v4.5M8 6V3.5"/>',
+  cable:'<path d="M2 3.5l12 3M6 4.5v3M4.5 7.5h3v3.5h-3z"/>'
+};
+ICON.car = ICON.taxi; ICON.tram = ICON.metro;
+const ico = m => '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">'+(ICON[m]||ICON.walk)+'</svg>';
+
+/* ---------- prepare data ---------- */
+D.cities.forEach((c, ci) => {
+  c._ci = ci;
+  (c.plans || []).forEach(p => {
+    p._stops = []; p._legs = [];
+    (p.days || []).forEach((d, di) => {
+      let n = 0;
+      (d.items || []).forEach((it, ii) => {
+        if (it.type === 'stop') {
+          n++; it._n = n; it._d = di; it._k = di + '-' + ii;
+          if (typeof it.lng === 'number' && typeof it.lat === 'number' && it.lng && it.lat && Math.abs(it.lat) <= 90 && Math.abs(it.lng) <= 180) p._stops.push(it);
+        } else if (it.type === 'leg') {
+          it._d = di; it._k = di + '-' + ii; it._li = p._legs.length; p._legs.push(it);
+        }
+      });
+    });
+  });
+});
+const total = (p, pax) => { const c = (p.cost || {})[pax] || {}; return COST_KEYS.reduce((s, k) => s + (+c[k] || 0), 0); };
+
+const S = { ci: 0, pi: 0, day: 0, pax: '2', hot: null, hl: null };
+const city = () => D.cities[S.ci];
+const plan = () => city().plans[S.pi];
+
+/* ---------- header ---------- */
+$('#ttl').textContent = D.title;
+const dayCount = Math.max(...D.cities.map(c => Math.max(0, ...(c.plans||[]).map(p => (p.days||[]).length))));
+$('#sub').textContent = D.subtitle || (D.cities.length + ' 座城市、' + D.cities.reduce((s, c) => s + (c.plans||[]).length, 0) + ' 套方案都按真实路网画在地图上。点时间线里的任意一站，地图会飞过去。');
+$('#citySeg').innerHTML = D.cities.map((c, i) => '<button data-c="'+i+'" aria-pressed="'+(i===0)+'">'+esc(c.name)+'</button>').join('');
+if (D.cities.length < 2) $('#citySeg').hidden = true;
+$('#citySeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setCity(+b.dataset.c); });
+$('#paxSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.pax = b.dataset.p; [...$('#paxSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b)); renderPlans(); renderFacts(); renderCmp(); renderTL(); });
+
+/* ---------- map ---------- */
+let map = null, markers = [], styleReady = false;
+const msg = (html, toast) => { const m = $('#mapmsg'); m.innerHTML = html; m.classList.toggle('on', !!html); m.classList.toggle('toast', !!toast); };
+
+function loadScript(src, ms) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src; s.async = true;
+    const t = setTimeout(() => rej(new Error('timeout')), ms);
+    s.onload = () => { clearTimeout(t); res(); }; s.onerror = () => { clearTimeout(t); rej(new Error('error')); };
+    document.head.appendChild(s);
+  });
+}
+async function loadLib() {
+  if (window.maplibregl) return true;
+  for (const base of LIBS) {
+    try {
+      const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = base + 'maplibre-gl.css'; document.head.appendChild(l);
+      await loadScript(base + 'maplibre-gl.js', 9000);
+      if (window.maplibregl) return true;
+    } catch (e) { if (window.maplibregl) return true; }
+  }
+  return !!window.maplibregl;
+}
+function nameExpr() { return ['coalesce', ['get', 'name'], ['get', 'name:nonlatin'], ['get', 'name_en']]; }
+async function getStyle() {
+  const dark = darkMQ.matches;
+  const url = 'https://tiles.openfreemap.org/styles/' + (dark ? 'dark' : 'positron');
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
+    const st = await (await fetch(url, { signal: ctl.signal })).json(); clearTimeout(t);
+    st.layers.forEach(l => {
+      const tf = l.layout && l.layout['text-field'];
+      if (tf && JSON.stringify(tf).includes('name')) l.layout['text-field'] = nameExpr();
+      if (l.layout && l.layout['text-font']) l.layout['text-font'] = ['Noto Sans Regular'];
+      const p = l.paint || (l.paint = {});
+      if (l.id === 'background') p['background-color'] = dark ? '#121518' : '#F3F4F5';
+      if (l.id === 'water') p['fill-color'] = dark ? '#0C1820' : '#D3DFE8';
+      if (/park/.test(l.id) && l.type === 'fill') { p['fill-color'] = dark ? '#18221D' : '#E1EADF'; }
+      // 克制底图：去掉道路编号牌，村镇等小地名放到更高缩放才出现，标签色调淡一些
+      if (/shield|oneway/.test(l.id)) { (l.layout = l.layout || {}).visibility = 'none'; }
+      if (/village|label_other|place_other|place_suburb/.test(l.id)) l.minzoom = Math.max(l.minzoom || 0, 12.5);
+      if (l.type === 'symbol' && /highway|road|street/.test(l.id)) p['text-color'] = dark ? '#7D868E' : '#8A939B';
+      if (dark && l.type === 'line' && /^(highway|tunnel|bridge|road)/.test(l.id) && !/area|pier/.test(l.id)) {
+        p['line-color'] = /casing/.test(l.id) ? '#14181B' : '#2A3137';
+      }
+      if (dark && /aeroway/.test(l.id)) { if (l.type === 'line') p['line-color'] = '#2A3137'; else if (l.type === 'fill') p['fill-color'] = '#1A1F23'; }
+    });
+    return st;
+  } catch (e) {
+    msg('底图没加载出来（网络慢或无法访问 OpenFreeMap），先只显示路线和站点。', true);
+    setTimeout(() => msg(''), 6000);
+    return { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': dark ? '#121518' : '#F3F4F5' } }] };
+  }
+}
+async function initMap() {
+  const ok = await loadLib();
+  if (!ok) { msg('地图组件（MapLibre）从 CDN 加载失败。右侧时间线和下方表格仍可使用。'); return; }
+  const c = city();
+  const style = await getStyle();
+  map = new maplibregl.Map({
+    container: 'map', style, center: c.center || [116.4, 39.9], zoom: c.zoom || 11,
+    attributionControl: { compact: true }, cooperativeGestures: true, dragRotate: false, pitchWithRotate: false,
+    localIdeographFontFamily: '"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif',
+    locale: {
+      'CooperativeGesturesHandler.WindowsHelpText': '按住 Ctrl 再滚动来缩放地图',
+      'CooperativeGesturesHandler.MacHelpText': '按住 ⌘ 再滚动来缩放地图',
+      'CooperativeGesturesHandler.MobileHelpText': '用两根手指移动地图',
+      'NavigationControl.ZoomIn': '放大', 'NavigationControl.ZoomOut': '缩小'
+    }
+  });
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 88 }), 'bottom-right');
+  map.on('style.load', () => { addLayers(); styleReady = true; drawPlan(true); });
+  map.on('moveend', declutter);
+  map.on('idle', () => { window.__mapIdle = true; });
+  map.on('error', e => { if (e && e.error) console.warn('map error', e.error.message || e.error); });
+  darkMQ.addEventListener && darkMQ.addEventListener('change', async () => { styleReady = false; map.setStyle(await getStyle()); });
+}
+
+const LINE_LAYERS = ['lg-case', 'lg-road', 'lg-bus', 'lg-metro', 'lg-walk', 'lg-train-c', 'lg-train', 'lg-flight', 'lg-boat', 'lg-cable'];
+function addLayers() {
+  const ink = css('--ink'), ink2 = css('--ink-2'), surf = css('--surface'), blue = css('--blue');
+  map.addSource('legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  const L = (id, filter, paint, layout) => map.addLayer({ id, type: 'line', source: 'legs', filter, paint, layout: Object.assign({ 'line-join': 'round', 'line-cap': 'round' }, layout || {}) });
+  const isM = ms => ['in', ['get', 'mode'], ['literal', ms]];
+  L('lg-hl', ['==', ['get', 'li'], -1], { 'line-color': css('--acc') || blue, 'line-width': 14, 'line-opacity': .22, 'line-blur': 2 });
+  L('lg-case', isM(['taxi', 'car', 'bus', 'metro', 'tram']), { 'line-color': surf, 'line-width': ['match', ['get', 'mode'], ['metro', 'tram'], 8, 6.5] });
+  L('lg-road', isM(['taxi', 'car']), { 'line-color': ink2, 'line-width': 3.2 });
+  L('lg-bus', isM(['bus']), { 'line-color': ink2, 'line-width': 3.2, 'line-dasharray': [2.5, 1.2] }, { 'line-cap': 'butt' });
+  L('lg-metro', isM(['metro', 'tram']), { 'line-color': ['coalesce', ['get', 'color'], css('--acc') || blue], 'line-width': 4.6 });
+  L('lg-walk', isM(['walk']), { 'line-color': css('--acc') || blue, 'line-width': 4, 'line-dasharray': [0, 1.8] });
+  L('lg-train-c', isM(['train']), { 'line-color': ink, 'line-width': 5.5 });
+  L('lg-train', isM(['train']), { 'line-color': surf, 'line-width': 2.6, 'line-dasharray': [2.5, 2.5] }, { 'line-cap': 'butt' });
+  L('lg-flight', isM(['flight']), { 'line-color': ink2, 'line-width': 2, 'line-dasharray': [2, 2] }, { 'line-cap': 'butt' });
+  L('lg-boat', isM(['boat']), { 'line-color': blue, 'line-width': 3, 'line-dasharray': [3, 2] }, { 'line-cap': 'butt' });
+  L('lg-cable', isM(['cable']), { 'line-color': ink, 'line-width': 2.4, 'line-dasharray': [0, 2] });
+  ['lg-road', 'lg-metro', 'lg-walk', 'lg-bus', 'lg-train', 'lg-flight', 'lg-boat', 'lg-cable', 'lg-case', 'lg-train-c'].forEach(id => {
+    map.on('click', id, e => { const f = e.features && e.features[0]; if (f) selLeg(f.properties.li, false); });
+    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+  });
+}
+function legFeatures(p) {
+  return p._legs.filter(l => l.geom && l.geom.length > 1).map(l => ({
+    type: 'Feature', geometry: { type: 'LineString', coordinates: l.geom },
+    properties: { li: l._li, d: l._d, mode: l.mode, color: l.color || null, approx: !!l.approx }
+  }));
+}
+function paintState() {
+  if (!map || !styleReady) return;
+  const dayF = S.day < 0 ? 1 : ['case', ['==', ['get', 'd'], S.day], 1, 0.14];
+  const hlF = S.hl == null ? 1 : ['case', ['==', ['get', 'li'], S.hl], 1, 0.4];
+  const apF = ['case', ['boolean', ['get', 'approx'], false], 0.55, 1];
+  const op = ['*', dayF, hlF, apF];
+  LINE_LAYERS.forEach(id => map.setPaintProperty(id, 'line-opacity', op));
+  map.setFilter('lg-hl', ['==', ['get', 'li'], S.hl == null ? -1 : S.hl]);
+  map.setPaintProperty('lg-hl', 'line-color', css('--acc'));
+  map.setPaintProperty('lg-walk', 'line-color', css('--acc'));
+}
+function drawPlan(fit) {
+  if (!map || !styleReady) return;
+  map.getSource('legs').setData({ type: 'FeatureCollection', features: legFeatures(plan()) });
+  paintState(); drawMarkers();
+  if (fit) fitView(false);
+}
+function drawMarkers() {
+  if (!map) return;
+  markers.forEach(m => m.remove()); markers = [];
+  const p = plan(), groups = new Map();
+  p._stops.forEach(s => {
+    const k = s.name + '@' + s.lng.toFixed(4) + ',' + s.lat.toFixed(4);
+    if (!groups.has(k)) groups.set(k, { stops: [], lng: s.lng, lat: s.lat, name: s.name });
+    groups.get(k).stops.push(s);
+  });
+  const hotelCodes = new Set();
+  (city().hotels || []).forEach(h => {
+    if (!(h.used_by || []).includes(p.code) || !h.lng || !h.lat || Math.abs(h.lat) > 90) return;
+    const near = [...groups.values()].some(g => Math.abs(g.lng - h.lng) < 0.0008 && Math.abs(g.lat - h.lat) < 0.0008);
+    if (!near) groups.set('h@' + h.name, { stops: [], lng: h.lng, lat: h.lat, name: h.name, hotel: h });
+  });
+  groups.forEach(g => {
+    const el = document.createElement('div');
+    const inDay = S.day < 0 ? g.stops : g.stops.filter(s => s._d === S.day);
+    let cls = 'mk', num = '', pri = 1;
+    if (g.hotel) { cls += ' ht'; num = '宿'; pri = 0; }
+    else if (S.day < 0) { cls += ' sm'; pri = 2; }
+    else if (inDay.length) { num = inDay.map(s => s._n).join('·'); pri = 3; }
+    else { cls += ' sm dim'; pri = 0; }
+    const first = inDay[0] || g.stops[0];
+    const showLb = g.hotel ? false : (S.day < 0 || inDay.length > 0);
+    const t = inDay.length && S.day >= 0 ? inDay.map(s => s.time).filter(Boolean).join(' / ') : '';
+    el.className = cls;
+    el.innerHTML = '<div class="dot">' + esc(num) + '</div>' + (showLb ? '<div class="lb">' + esc(g.name) + (t ? '<small>' + esc(t) + '</small>' : '') + '</div>' : '');
+    el.title = g.name + (g.hotel ? '（住宿）' : '');
+    el.setAttribute('role', 'button'); el.tabIndex = -1;
+    el.addEventListener('click', ev => { ev.stopPropagation(); if (first) selStop(first._k, true, true); });
+    const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([g.lng, g.lat]).addTo(map);
+    m._keys = g.stops.map(s => s._k); m._pri = pri; m._el = el;
+    markers.push(m);
+  });
+  markHot();
+  requestAnimationFrame(declutter);
+}
+function declutter() {
+  const kept = [];
+  const ov = (a, b) => !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  [...markers].sort((a, b) => (S.hot && b._keys.includes(S.hot) ? 9 : b._pri) - (S.hot && a._keys.includes(S.hot) ? 9 : a._pri)).forEach(m => {
+    const d = m._el.querySelector('.dot'); if (d && m._pri > 0) kept.push(d.getBoundingClientRect());
+  });
+  [...markers].sort((a, b) => (S.hot && b._keys.includes(S.hot) ? 9 : b._pri) - (S.hot && a._keys.includes(S.hot) ? 9 : a._pri)).forEach(m => {
+    const lb = m._el.querySelector('.lb'); if (!lb) return;
+    lb.classList.remove('hide');
+    const r = lb.getBoundingClientRect();
+    const own = m._el.querySelector('.dot').getBoundingClientRect();
+    const hit = kept.some(k => k !== own && !(k.left === own.left && k.top === own.top) && ov(r, k));
+    if (hit) lb.classList.add('hide'); else kept.push(r);
+  });
+}
+function markHot() {
+  markers.forEach(m => m._el.classList.toggle('hot', !!S.hot && m._keys.includes(S.hot)));
+}
+function boundsOf(points) {
+  if (!points.length) return null;
+  const b = new maplibregl.LngLatBounds(points[0], points[0]);
+  points.forEach(p => b.extend(p));
+  return b;
+}
+function pad() {
+  const w = $('#map').clientWidth;
+  return w < 640 ? { top: 56, bottom: 88, left: 32, right: 56 } : { top: 64, bottom: 80, left: 48, right: 72 };
+}
+function fitView(anim) {
+  if (!map) return;
+  const p = plan(), pts = [];
+  p._stops.forEach(s => { if (S.day < 0 || s._d === S.day) pts.push([s.lng, s.lat]); });
+  p._legs.forEach(l => { if ((S.day < 0 || l._d === S.day) && l.geom && !SCHEM.has(l.mode)) l.geom.forEach(c => pts.push(c)); });
+  if (S.day < 0) (city().hotels || []).forEach(h => { if ((h.used_by || []).includes(p.code) && h.lng && h.lat) pts.push([h.lng, h.lat]); });
+  const b = boundsOf(pts);
+  if (!b) { map.jumpTo({ center: city().center, zoom: city().zoom || 11 }); return; }
+  map.fitBounds(b, { padding: pad(), maxZoom: 15.5, duration: anim && !reduce ? 700 : 0 });
+}
+
+/* ---------- selection ---------- */
+function findStop(k) { return plan()._stops.find(s => s._k === k) || null; }
+function selStop(k, fly, fromMap) {
+  const s = findStop(k); if (!s) return;
+  if (S.day >= 0 && s._d !== S.day) { S.day = s._d; S.hl = null; renderDays(); renderTL(); drawPlan(false); }
+  S.hot = k; S.hl = null; paintState(); markHot(); declutter();
+  document.querySelectorAll('.stp').forEach(e => e.classList.toggle('hot', e.dataset.k === k));
+  document.querySelectorAll('.lg').forEach(e => e.classList.remove('on'));
+  const row = document.querySelector('.stp[data-k="' + k + '"]');
+  if (row && fromMap) row.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  if (row && !fromMap) {} // already visible
+  if (map && fly) {
+    const z = Math.max(map.getZoom(), 15);
+    if (reduce) map.jumpTo({ center: [s.lng, s.lat], zoom: z });
+    else map.flyTo({ center: [s.lng, s.lat], zoom: z, speed: 1.4, curve: 1.4, essential: true });
+  }
+  if (S.day < 0) renderTL();
+}
+function selLeg(li, fit) {
+  const l = plan()._legs[li]; if (!l) return;
+  if (S.day >= 0 && l._d !== S.day) { S.day = l._d; renderDays(); renderTL(); drawPlan(false); }
+  S.hl = li; S.hot = null; paintState(); markHot();
+  document.querySelectorAll('.stp').forEach(e => e.classList.remove('hot'));
+  document.querySelectorAll('.lg').forEach(e => e.classList.toggle('on', +e.dataset.li === li));
+  const row = document.querySelector('.lg[data-li="' + li + '"]');
+  if (row && !fit) row.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  if (map && fit && l.geom) map.fitBounds(boundsOf(l.geom), { padding: pad(), maxZoom: 16, duration: reduce ? 0 : 700 });
+}
+
+/* ---------- panel ---------- */
+function setCity(ci) {
+  S.ci = ci; S.pi = 0; S.day = 0; S.hot = null; S.hl = null;
+  document.body.dataset.acc = String(ci % 3);
+  [...$('#citySeg').children].forEach((b, i) => b.setAttribute('aria-pressed', i === ci));
+  renderAll(true);
+}
+function setPlan(pi) { S.pi = pi; S.day = 0; S.hot = null; S.hl = null; renderAll(true); }
+function setDay(d) { S.day = d; S.hot = null; S.hl = null; renderDays(); renderTL(); renderCap(); drawPlan(false); fitView(true); }
+function renderAll(fit) { renderPlans(); renderFacts(); renderDays(); renderTL(); renderCap(); renderLegend(); renderCmp(); drawPlan(fit); }
+
+function renderPlans() {
+  const c = city(), ts = c.plans.map(p => total(p, S.pax)), min = Math.min(...ts);
+  $('#plans').innerHTML = c.plans.map((p, i) =>
+    '<button class="pl-b" data-i="' + i + '" aria-pressed="' + (i === S.pi) + '">' +
+      '<span class="cd">' + esc(p.code) + '</span>' +
+      '<span><span class="nm">' + esc(p.name) + (c.plans.length > 1 && ts[i] === min ? '<span class="tag-gold">最省</span>' : '') + '</span>' +
+      '<span class="th">' + esc([p.theme, p.intensity].filter(Boolean).join(' · ')) + '</span></span>' +
+      '<span class="pr tn">¥' + fmt(ts[i]) + '<small>' + S.pax + ' 人 · 人均</small></span></button>').join('');
+}
+$('#plans').addEventListener('click', e => { const b = e.target.closest('.pl-b'); if (b) setPlan(+b.dataset.i); });
+function renderFacts() {
+  const p = plan(), cc = (p.cost || {})[S.pax] || {};
+  const rows = [['适合', p.fit], ['去程', p.go], ['回程', p.back], ['住宿', p.stay]].filter(r => r[1]);
+  rows.push(['人均', '<span class="cost"><b>¥' + fmt(total(p, S.pax)) + '</b>（' + S.pax + ' 人）· ' + COST_KEYS.map(k => esc(k.replace('门票项目', '门票').replace('往返交通', '往返').replace('当地交通', '市内')) + ' ' + fmt(cc[k])).join(' / ') + '</span>']);
+  $('#facts').innerHTML = rows.map(r => '<dt>' + r[0] + '</dt><dd>' + (r[0] === '人均' ? r[1] : esc(r[1])) + '</dd>').join('');
+}
+function renderDays() {
+  const p = plan();
+  $('#days').innerHTML = '<button data-d="-1" aria-pressed="' + (S.day < 0) + '">全部<span>' + p.days.length + ' 天</span></button>' +
+    p.days.map((d, i) => '<button data-d="' + i + '" aria-pressed="' + (S.day === i) + '" title="' + esc(d.title) + '">' + esc(d.date) + '<span>' + esc(d.title) + '</span></button>').join('');
+}
+$('#days').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setDay(+b.dataset.d); });
+function weatherOf(date) { const w = (city().weather || []).find(x => x.date === date); return w ? w.text : ''; }
+function legRow(l) {
+  const lc = (l.mode === 'metro' || l.mode === 'tram') && l.line ? '<span class="lc" style="background:' + esc(l.color || css('--acc')) + '">' + esc(l.line) + '</span>' : '';
+  const ap = (SCHEM.has(l.mode) || l.approx) ? '<span class="ap-t">示意</span>' : '';
+  const km = l.km != null && !SCHEM.has(l.mode) ? (l.km < 1 ? Math.round(l.km * 1000) + ' m' : l.km.toFixed(1) + ' km') : '';
+  return '<li class="lg m-' + esc(l.mode) + '" data-li="' + l._li + '"><span class="rail-v"' + ((l.mode === 'metro' || l.mode === 'tram') ? ' style="border-left:4px solid ' + esc(l.color || css('--acc')) + '"' : '') + '></span>' +
+    '<span class="tx">' + ico(l.mode) + lc + '<span>' + esc(l.label || MODE_NAME[l.mode] || l.mode) + '</span>' + ap + '</span><span class="km">' + km + '</span></li>';
+}
+function stopRow(s) {
+  return '<li class="stp' + (S.hot === s._k ? ' hot' : '') + '" data-k="' + s._k + '"><span class="n">' + s._n + '</span><div><div class="hd">' +
+    (s.time ? '<time>' + esc(s.time) + '</time>' : '') + '<b>' + esc(s.name) + '</b>' + (s.mentions ? '<span class="hit">攻略 ' + s.mentions + '</span>' : '') +
+    '</div>' + (s.note ? '<p>' + esc(s.note) + '</p>' : '') + '</div></li>';
+}
+function renderTL() {
+  const p = plan(); let h = '';
+  if (S.day >= 0) {
+    const d = p.days[S.day], w = weatherOf(d.date);
+    h += '<div class="dh"><h3>' + esc(d.title) + '</h3><span class="chip">' + esc(d.date) + '</span>' + (w ? '<span class="chip">' + esc(w) + '</span>' : '') + '</div><ol class="steps">';
+    (d.items || []).forEach(it => { h += it.type === 'stop' ? stopRow(it) : it.type === 'leg' ? legRow(it) : ''; });
+    h += '</ol>';
+  } else {
+    p.days.forEach((d, i) => {
+      const st = d.items.filter(x => x.type === 'stop'), lg = d.items.filter(x => x.type === 'leg');
+      const walk = lg.filter(x => x.mode === 'walk').reduce((s, x) => s + (x.km || 0), 0);
+      const seq = st.filter((s, j) => j === 0 || s.name !== st[j - 1].name).map(s => esc(s.name)).join('<i>→</i>');
+      const w = weatherOf(d.date);
+      h += '<button class="dcard" data-d="' + i + '"><div class="t"><b>' + esc(d.title) + '</b><span>' + esc(d.date) + (w ? ' · ' + esc(w) : '') + '</span></div>' +
+        '<div class="seq">' + seq + '</div><div class="st">' + st.length + ' 站 · 步行约 ' + walk.toFixed(1) + ' km</div></button>';
+    });
+  }
+  const tips = p.tips || [], notes = p.cost_notes || {};
+  if (tips.length) h += '<div class="tips"><h4>注意</h4><ul>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></div>';
+  if (Object.keys(notes).length) h += '<div class="tips"><h4>费用怎么算的（' + S.pax + ' 人人均）</h4><dl>' + COST_KEYS.filter(k => notes[k] != null).map(k => '<dt>' + esc(k) + ' ¥' + fmt(((p.cost || {})[S.pax] || {})[k]) + '</dt><dd>' + esc(notes[k]) + '</dd>').join('') + '</dl></div>';
+  $('#tl').innerHTML = h;
+}
+$('#tl').addEventListener('click', e => {
+  const s = e.target.closest('.stp'); if (s) return selStop(s.dataset.k, true, false);
+  const l = e.target.closest('.lg'); if (l) return selLeg(+l.dataset.li, true);
+  const d = e.target.closest('.dcard'); if (d) return setDay(+d.dataset.d);
+});
+$('#tl').addEventListener('mouseover', e => {
+  const l = e.target.closest('.lg'); if (!l || !map || !styleReady) return;
+  map.setFilter('lg-hl', ['==', ['get', 'li'], +l.dataset.li]);
+});
+$('#tl').addEventListener('mouseleave', () => { if (map && styleReady) map.setFilter('lg-hl', ['==', ['get', 'li'], S.hl == null ? -1 : S.hl]); });
+function renderCap() {
+  const c = city(), p = plan(), d = S.day >= 0 ? p.days[S.day] : null;
+  $('#cap').innerHTML = '<b>' + esc(c.name) + ' · ' + esc(p.code) + ' ' + esc(p.name) + '</b><span>' + (d ? esc(d.date + ' · ' + d.title) : '全部 ' + p.days.length + ' 天') + '</span>';
+}
+function renderLegend() {
+  const p = plan(), modes = [...new Set(p._legs.map(l => l.mode))];
+  const acc = 'var(--acc)';
+  const sw = {
+    walk: '<path d="M2 6h24" stroke="' + acc + '" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 6"/>',
+    taxi: '<path d="M2 6h24" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round"/>',
+    bus: '<path d="M2 6h24" stroke="var(--ink-2)" stroke-width="3" stroke-dasharray="7 3"/>',
+    metro: '<path d="M2 6h24" stroke="#97A0A8" stroke-width="4" stroke-linecap="round"/>',
+    train: '<path d="M2 6h24" stroke="var(--ink)" stroke-width="5"/><path d="M2 6h24" stroke="var(--surface)" stroke-width="2" stroke-dasharray="5 5"/>',
+    flight: '<path d="M2 6h24" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 4"/>',
+    boat: '<path d="M2 6h24" stroke="var(--blue)" stroke-width="3" stroke-dasharray="7 4"/>',
+    cable: '<path d="M2 6h24" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="0 5"/>'
+  };
+  sw.car = sw.taxi; sw.tram = sw.metro;
+  const name = { walk: '步行', taxi: '打车', car: '自驾', bus: '公交', metro: '地铁（线路色）', tram: '有轨电车', train: '火车（示意）', flight: '飞机（示意）', boat: '轮渡（示意）', cable: '索道（示意）' };
+  if (modes.includes('car') && modes.includes('taxi')) modes.splice(modes.indexOf('car'), 1);
+  let h = modes.map(m => '<span class="it"><svg viewBox="0 0 28 12">' + (sw[m] || '') + '</svg>' + (m === 'taxi' && modes.includes('car') ? '打车 / 自驾' : name[m] || m) + '</span>').join('');
+  if (p._legs.some(l => l.approx)) h += '<span class="note">淡色直线：路由失败，按直线示意</span>';
+  $('#legend').innerHTML = h;
+}
+$('#fit').addEventListener('click', () => { S.hot = null; S.hl = null; paintState(); markHot(); document.querySelectorAll('.stp.hot,.lg.on').forEach(e => e.classList.remove('hot', 'on')); fitView(true); });
+
+/* ---------- sections ---------- */
+const accOf = ci => ['var(--blue)', 'var(--green)', 'var(--gold)'][ci % 3];
+function renderCmp() {
+  const rows = []; D.cities.forEach(c => c.plans.forEach((p, pi) => rows.push({ c, p, pi, t: total(p, S.pax) })));
+  const max = Math.max(...rows.map(r => r.t), 1);
+  const best = rows.reduce((a, b) => b.t < a.t ? b : a, rows[0]);
+  $('#cmpLede').textContent = S.pax + ' 人同行时的人均，含往返交通、住宿、市内交通、门票项目和餐饮，不含购物。' + (rows.length > 1 ? '最省的是' + best.c.name + ' ' + best.p.code + '「' + best.p.name + '」，人均 ¥' + fmt(best.t) + '。' : '') + '点一行可以在上面的地图里打开。';
+  $('#cmp').innerHTML = rows.map(r => {
+    const cc = (r.p.cost || {})[S.pax] || {};
+    return '<button class="crow' + (r.c._ci === S.ci && r.pi === S.pi ? ' cur' : '') + '" data-c="' + r.c._ci + '" data-p="' + r.pi + '"><span class="lb2"><b>' + esc(r.c.name) + ' ' + esc(r.p.code) + ' · ' + esc(r.p.name) + '</b><span>' + esc(r.p.theme || '') + '</span></span>' +
+      '<span class="bar" style="width:' + (r.t / max * 100).toFixed(1) + '%">' + COST_KEYS.map((k, i) => '<i title="' + esc(k) + ' ¥' + fmt(cc[k]) + '" style="width:' + ((+cc[k] || 0) / (r.t || 1) * 100).toFixed(2) + '%;background:' + COST_COLORS[i] + '"></i>').join('') + '</span>' +
+      '<span class="tot">¥' + fmt(r.t) + '<small>人均</small></span></button>';
+  }).join('');
+  $('#ckey').innerHTML = COST_KEYS.map((k, i) => '<span><i style="background:' + COST_COLORS[i] + '"></i>' + esc(k) + '</span>').join('');
+}
+$('#cmp').addEventListener('click', e => {
+  const b = e.target.closest('.crow'); if (!b) return;
+  const ci = +b.dataset.c, pi = +b.dataset.p;
+  if (ci !== S.ci) setCity(ci);
+  setPlan(pi);
+  $('#stage').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+});
+const pbadges = (arr, ci) => (arr || []).map(x => '<span class="pb" style="--acc-c:' + accOf(ci) + '">' + esc(x) + '</span>').join('');
+function renderStatic() {
+  const n = Math.min(D.cities.length, 3);
+  ['#trans', '#hotels', '#vids'].forEach(id => $(id).style.setProperty('--n', n));
+  const hd = c => '<h3><i style="background:' + accOf(c._ci) + '"></i>' + esc(c.name) + '</h3>';
+  $('#trans').innerHTML = D.cities.map(c => {
+    const t = c.transport || {};
+    const grp = (lab, arr) => arr && arr.length ? '<tr class="grp"><td colspan="4">' + lab + '</td></tr>' + arr.map(x =>
+      '<tr><td>' + esc(x.type) + ' ' + esc(x.no) + '<small>' + esc(x.from) + ' → ' + esc(x.to) + (x.note ? ' · ' + esc(x.note) : '') + '</small></td><td class="tn">' + esc(x.time) + '</td><td class="r">¥' + fmt(x.price) + '</td><td class="r">' + pbadges(x.default_for, c._ci) + '</td></tr>').join('') : '';
+    return '<div>' + hd(c) + '<table class="t"><thead><tr><th>班次</th><th>时间</th><th class="r">价格</th><th class="r">默认</th></tr></thead><tbody>' + grp('去程', t.go) + grp('回程', t.back) + '</tbody></table></div>';
+  }).join('');
+  $('#hotels').innerHTML = D.cities.map(c => '<div>' + hd(c) + '<table class="t"><thead><tr><th>酒店</th><th class="r">评分</th><th class="r">三晚</th><th class="r">每人每晚</th><th class="r">方案</th></tr></thead><tbody>' +
+    (c.hotels || []).map(h => '<tr><td>' + esc(h.name) + '<small>' + esc([h.area, h.note].filter(Boolean).join(' · ')) + '</small></td><td class="r">' + (h.rating != null ? esc(h.rating) : '—') + '</td><td class="r">¥' + fmt(h.price_3n) + '</td><td class="r">¥' + fmt(h.price_3n / 6) + '</td><td class="r">' + pbadges(h.used_by, c._ci) + '</td></tr>').join('') + '</tbody></table></div>').join('');
+  $('#vids').innerHTML = D.cities.map(c => {
+    const ms = (c.mentions || []).slice().sort((a, b) => b.count - a.count).slice(0, 14), mx = Math.max(1, ...ms.map(m => m.count));
+    const codes = (c.plans || []).map(p => p.code);
+    const vids = (c.videos || []).slice().sort((a, b) => (b.views || 0) - (a.views || 0));
+    return '<div>' + hd(c) + '<div style="font-size:12px;color:var(--ink-2);margin-bottom:var(--space-2)">' + vids.length + ' 个视频，播放共 ' + fmt(vids.reduce((s, v) => s + (v.views || 0), 0) / 10000) + ' 万</div>' +
+      ms.map(m => '<div class="mr"><span class="mn" title="' + esc(m.name) + '">' + esc(m.name) + '</span><span class="mb"><i style="width:' + (m.count / mx * 100).toFixed(1) + '%;background:' + accOf(c._ci) + '"></i></span><span class="mc">' + m.count + '</span><span class="mp">' + codes.map(x => (m.plans || []).includes(x) ? '<b>' + esc(x) + '</b>' : '<s>' + esc(x) + '</s>').join(' ') + '</span></div>').join('') +
+      ((c.pits || []).length ? '<h3 style="margin-top:var(--space-4)">避坑</h3><ul class="pit">' + c.pits.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
+      (vids.length ? '<div class="vlist">' + vids.slice(0, 5).map(v => '<div><a href="https://www.bilibili.com/video/' + esc(v.bvid) + '" target="_blank" rel="noopener">' + esc(v.title) + '</a> · ' + esc(v.author || '') + ' · ' + fmt((v.views || 0) / 10000) + ' 万播放</div>').join('') + '</div>' : '') + '</div>';
+  }).join('');
+  const src = []; D.cities.forEach(c => (c.sources || []).forEach(s => src.push('<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(c.name + ' · ' + s.name) + '</a>')));
+  $('#foot').innerHTML = '<p>价格查询日期：' + D.cities.map(c => esc(c.name) + ' ' + esc(c.checked_at || '—')).join('，') + '。机票、酒店价格随时变化，下单前以平台实时价格为准。人均按两人一间计算，不含购物。</p>' +
+    '<p>底图 © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · 数据 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 贡献者。步行和驾车路线由 routing.openstreetmap.de（OSRM）计算，地铁沿 OSM 轨道绘制；标「示意」的段落为直线或弧线。</p>' +
+    (src.length ? '<p>来源：' + src.join(' · ') + '</p>' : '') + '<p>生成于 ' + esc(D.generated) + '。</p>';
+}
+
+/* ---------- boot ---------- */
+renderStatic();
+renderAll(false);
+initMap();
+window.__trip = { S, setCity, setPlan, setDay, selStop, selLeg, get map() { return map; } };
+})();
+</script>
+</body>
+</html>
