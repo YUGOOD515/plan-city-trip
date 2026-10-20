@@ -158,7 +158,7 @@ def api(method: str, parts: list, body: dict):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "travel-agent/" + VERSION
+    server_version = "plan-city-trip/" + VERSION
 
     def log_message(self, fmt, *args):  # 安静一点，只记错误
         if args and str(args[1] if len(args) > 1 else "").startswith(("4", "5")):
@@ -236,7 +236,7 @@ def serve(port: int) -> None:
     info = state.server_info()
     info.update({"pid": os.getpid(), "port": port})
     state.write_json(state.SERVER, info)
-    print(f"travel-agent 网页：http://127.0.0.1:{port}/", flush=True)
+    print(f"plan-city-trip 网页：http://127.0.0.1:{port}/", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

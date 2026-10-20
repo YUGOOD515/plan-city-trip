@@ -1,4 +1,4 @@
-# 旅游 Agent · Skill
+# plan-city-trip · 单城市行程规划 Skill
 
 把「看 B 站攻略 → 提炼热门地点和避坑 → 排 3 套方案 → 出交互地图」做成一个可以接进任何 AI 工具（Claude Code、Codex、DeepSeek 等能跑命令的 Agent）的 Skill。
 
@@ -11,7 +11,7 @@
 
 只需要 Python 3.9+（标准库，无第三方依赖）和能联网的电脑。
 
-- **Claude Code**：把整个目录放到 `~/.claude/skills/travel-agent/`。
+- **Claude Code**：`git clone https://github.com/YUGOOD515/plan-city-trip ~/.claude/skills/plan-city-trip`。
 - **Codex / 其他 Agent**：放在任意位置，在项目说明（如 `AGENTS.md`）里写一句「做旅游规划时，读 `<路径>/SKILL.md` 并照做」。
 
 然后对 AI 说：「帮我规划去大连玩，10/23–10/25，两个人，从北京出发」。
@@ -21,6 +21,8 @@
 ```bash
 python3 trip.py serve --open          # 打开网页（--stop 关闭）
 python3 trip.py --help                # 所有命令
+python3 trip.py mentions <case> 黄鹤楼 武汉大学=武大   # 地点被几个视频提到
+python3 trip.py grep <case> --pits                  # 字幕里的避坑句
 ```
 
 两个工具也能单独用：`sources/bilibili/bili_sub.py`（B 站字幕下载）、`maptool/build_map.py`（plans.json → 地图），说明见各自目录。

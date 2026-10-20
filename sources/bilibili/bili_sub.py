@@ -143,8 +143,12 @@ def srt_time(t):
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
 
-def safe(name, n=40):
-    return re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_")[:n]
+def safe(name, n=40, max_bytes=90):
+    """文件名里的标题部分：去掉非法字符，限 n 个字、max_bytes 字节（中文 3 字节/字），避免 Windows 260 路径上限。"""
+    s = re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_")[:n]
+    while len(s.encode("utf-8")) > max_bytes:
+        s = s[:-1]
+    return s.rstrip("_.") or "untitled"
 
 
 def fetch_video(bvid, outdir, lang=None, all_pages=False, formats=("json",)):

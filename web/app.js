@@ -1,4 +1,4 @@
-/* 旅游 Agent 网页：只读 /api 显示状态，用户操作写回 /api。所有业务逻辑在 AI 和 trip.py 那边。 */
+/* 城市行程规划网页：只读 /api 显示状态，用户操作写回 /api。所有业务逻辑在 AI 和 trip.py 那边。 */
 'use strict';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -57,10 +57,10 @@ function watchFocus(currentId) {  // AI 新建或切换案例时，网页自动�
 
 /* ---------- 首页 ---------- */
 function home() {
-  document.title = '旅游 Agent';
+  document.title = '城市行程规划';
   app.innerHTML = `
   <section class="hero">
-    <p class="kicker">旅游 Agent · 从真人攻略到能走的路线</p>
+    <p class="kicker">plan-city-trip · 从真人攻略到能走的路线</p>
     <h1 class="display">今天去哪儿旅游？</h1>
     <form class="ask-city" id="cityForm" autocomplete="off">
       <input id="city" name="city" aria-label="城市" placeholder="输入一个城市，比如 大连" maxlength="20" autofocus>
@@ -124,7 +124,7 @@ function nowKind(c) {
   return 'stage';
 }
 function render(c) {
-  document.title = c.city + ' · 旅游 Agent';
+  document.title = c.city + ' · 城市行程规划';
   aiPill(c.now, c.ai_seen, !!c.ask);
   const mode = modeOf(c);
   const key = mode + (mode === 'work' ? ':' + nowKind(c) + ':' + c.status : '') + (mode === 'prepare' ? ':' + (c.ask ? c.ask.id : '-') + ':' + c.claimed : '');
@@ -205,7 +205,7 @@ function buildPrepare(c) {
   const F = k => META.fields.find(f => f.key === k);
   const left = ['origin', 'date_start', 'date_end', 'people', 'budget', 'pace', 'transport', 'interests', 'note'];
   app.innerHTML = head(c, c.claimed ? '第 1 步 · 准备' : '已记下 · 等 AI 接手') + steps(c) + autoBarHTML() +
-    (c.claimed ? '' : `<div class="auto" data-s="paused" style="margin-bottom:24px"><div class="txt">AI 还没接手这个案例。可以先把条件填好，AI 连上后会从这里继续。还没打开 AI 的话，在你的 AI 工具里说「用旅游 Agent 规划」。</div></div>`) +
+    (c.claimed ? '' : `<div class="auto" data-s="paused" style="margin-bottom:24px"><div class="txt">AI 还没接手这个案例。可以先把条件填好，AI 连上后会从这里继续。还没打开 AI 的话，在你的 AI 工具里说「用 plan-city-trip 规划」。</div></div>`) +
     `<div class="cols prep">
       <section class="card panel"><h2>出行条件</h2><div class="fgrid">${left.map(k => field(F(k))).join('')}</div></section>
       <section>

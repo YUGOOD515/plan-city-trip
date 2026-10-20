@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""travel-agent 命令行：AI 通过它完成整套流程，网页同步显示。
+"""plan-city-trip 命令行：AI 通过它完成整套流程，网页同步显示。
 
 所有命令都向标准输出打印一行 JSON，方便 AI 解析；用 `python3 trip.py <命令> -h` 看参数。
 只依赖 Python 3.9+ 标准库。完整流程见 SKILL.md。
@@ -140,6 +140,9 @@ def apply_sets(cid, vals, by):
         if applied:
             labels = {f["key"]: f["label"] for f in state.FIELDS}
             state._push_log(c, "已预填：" + "、".join(labels[k] for k in applied), "ai")
+            q = c.get("ask")
+            if q and q.get("kind") == "prepare" and q.get("answer") is None:
+                q["last_activity"] = state.now()  # 条件变了，给用户重新看一遍的时间
     touch(cid, fn)
     return applied, skipped
 
@@ -279,6 +282,10 @@ def cmd_ask(a):
             if not q:
                 result["gone"] = True
                 return
+            if q.get("answer") is None and q.get("blocked") and not state.missing_required(c):
+                # 刚补齐必填项：重新倒计时，让用户先看一眼再继续
+                q["blocked"], q["last_activity"] = None, state.now()
+                state._push_log(c, f"必填项已补齐，{q['timeout']} 秒无操作后按默认继续", "ai")
             if q.get("answer") is None and not q.get("paused"):
                 remain = max(q["created"], q.get("last_activity", 0)) + q["timeout"] - state.now()
                 if remain <= 0:
@@ -599,19 +606,45 @@ def cmd_fetch(a):
 
 def cmd_digest(a):
     cid = a.case
-    c = state.load(cid)
-    docs = []
-    for sid in state.form_values(c).get("sources") or ["bilibili"]:
-        docs += sources.get(sid).documents(os.path.join(state.case_dir(cid), "sources", sid))
-    if not docs:
-        die("没有可用的字幕，先运行 fetch")
+    docs = _docs(cid)
     info = tools.digest(docs, os.path.join(state.case_dir(cid), "sources", "digest.md"))
     videos = [{"bvid": d["id"], "title": d["title"], "author": d["author"], "views": d.get("views"),
                "url": d["url"]} for d in docs]
     state.write_json(os.path.join(state.case_dir(cid), "sources", "videos.json"), videos)
     touch(cid, lambda c: (state.set_stage(c, "digest", "active"),
                           state._push_log(c, f"整理好 {info['docs']} 篇攻略原文（{info['chars']} 字），开始提炼要点", "ai")))
-    out({"status": "ok", **info, "hint": "读 digest.md，提炼热门地点、避坑、美食，写进 plans.json 的 mentions / pits"})
+    hint = "读 digest.md，提炼热门地点、避坑、美食，写进 plans.json 的 mentions / pits"
+    if info["chars"] > 30000:
+        hint = (f"字幕共 {info['chars']} 字，不必通读：先浏览 digest.md 列出候选地点，再用 "
+                f"`trip.py mentions {cid} 地点=别名...` 统计热度、`trip.py grep {cid} --pits` 找避坑、"
+                f"`trip.py grep {cid} 关键词` 看上下文")
+    out({"status": "ok", **info, "hint": hint})
+
+
+def _docs(cid):
+    c = state.load(cid)
+    docs = []
+    for sid in state.form_values(c).get("sources") or ["bilibili"]:
+        docs += sources.get(sid).documents(os.path.join(state.case_dir(cid), "sources", sid))
+    if not docs:
+        die("没有可用的字幕，先运行 fetch")
+    return docs
+
+
+def cmd_mentions(a):
+    docs = _docs(a.case)
+    rows = tools.mentions(docs, a.names)
+    zero = [r["name"] for r in rows if not r["count"]]
+    out({"status": "ok", "docs": len(docs), "mentions": [r for r in rows if r["count"]], "not_found": zero,
+         "hint": "count 是提到它的视频数，直接填进 plans.json 的 mentions 和 stop.mentions"})
+
+
+def cmd_grep(a):
+    words = list(a.words) + (tools.PIT_WORDS if a.pits else [])
+    if not words:
+        die("给至少一个关键词，或加 --pits 查避坑句")
+    hits = tools.grep(_docs(a.case), words, a.width, a.limit)
+    out({"status": "ok", "count": len(hits), "hits": hits})
 
 
 # ---------------------------------------------------------------- 规划工具
@@ -730,7 +763,7 @@ def cmd_fail(a):
 
 # ---------------------------------------------------------------- 入口
 def main():
-    ap = argparse.ArgumentParser(prog="trip.py", description="旅游 Agent 命令行（AI 用）")
+    ap = argparse.ArgumentParser(prog="trip.py", description="城市行程规划命令行（AI 用）")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def add(name, fn, help_, case=True):
@@ -805,6 +838,13 @@ def main():
     p.add_argument("job", choices=["fetch", "build"])
     p.add_argument("--max-wait", type=int, default=DEFAULT_MAX_WAIT)
     add("digest", cmd_digest, "把字幕整理成 digest.md")
+    p = add("mentions", cmd_mentions, "统计地点被几个视频提到；名称可写成 `正式名=别名1|别名2`")
+    p.add_argument("names", nargs="+")
+    p = add("grep", cmd_grep, "在字幕里找含关键词的句子（带前后文）；--pits 附带常见避坑词")
+    p.add_argument("words", nargs="*")
+    p.add_argument("--pits", action="store_true")
+    p.add_argument("--width", type=int, default=40, help="关键词前后各取多少字")
+    p.add_argument("--limit", type=int, default=40)
     p = add("geocode", cmd_geocode, "查地点坐标（WGS84）")
     p.add_argument("names", nargs="+")
     p.add_argument("--city")

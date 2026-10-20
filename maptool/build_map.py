@@ -24,7 +24,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-UA = "travel-agent-skill-maptool/1.0 (personal trip planner)"
+UA = "plan-city-trip-maptool/1.0 (personal trip planner)"
 MAPLIBRE_VER = "5.24.0"
 
 MODES = {"walk", "taxi", "car", "bus", "metro", "tram", "train", "flight", "boat", "cable"}

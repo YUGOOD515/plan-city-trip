@@ -2,24 +2,33 @@
 from __future__ import annotations
 
 import datetime as dt
+import http.client
 import json
 import os
+import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 from core import state
 
-UA = "travel-agent-skill/1.0 (personal trip planner)"
+UA = "plan-city-trip-skill/1.0 (personal trip planner)"
 WMO = {0: "晴", 1: "晴间多云", 2: "多云", 3: "阴", 45: "雾", 48: "雾", 51: "毛毛雨", 53: "毛毛雨", 55: "毛毛雨",
        61: "小雨", 63: "中雨", 65: "大雨", 66: "冻雨", 67: "冻雨", 71: "小雪", 73: "中雪", 75: "大雪", 77: "雪粒",
        80: "阵雨", 81: "阵雨", 82: "强阵雨", 85: "阵雪", 86: "阵雪", 95: "雷阵雨", 96: "雷阵雨伴冰雹", 99: "雷阵雨伴冰雹"}
 
 
-def _json(url, timeout=20):
+def _json(url, timeout=20, tries=3):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "zh-CN,zh"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    for i in range(tries):  # 免费接口偶尔断连（Remote end closed connection），退避重试
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except (OSError, http.client.HTTPException) as e:
+            if i == tries - 1 or (isinstance(e, urllib.error.HTTPError) and e.code < 500 and e.code != 429):
+                raise
+            time.sleep(1.5 * (i + 1))
 
 
 # ---------------------------------------------------------------- 坐标（WGS84，和地图底图一致）
@@ -104,3 +113,47 @@ def digest(docs: list, path: str) -> dict:
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     return {"path": path, "docs": len(docs), "chars": sum(len(d["text"]) for d in docs)}
+
+# ---------------------------------------------------------------- 查字幕（digest.md 太长时不用通读）
+# 越靠前越优先展示
+PIT_WORDS = ["避雷", "避坑", "踩坑", "智商税", "别去", "不要去", "别买", "不要买", "宰客", "不值", "千万别", "千万不要",
+             "套路", "骗", "坑", "人太多", "人挤人", "排队", "提前预约", "要预约", "闭馆", "小心", "注意"]
+
+
+def mentions(docs: list, names: list) -> list:
+    """names 每项写成 `正式名` 或 `正式名=别名1|别名2`。返回每个地点被几个视频提到（视频数，不是次数）。"""
+    rows = []
+    for spec in names:
+        name, _, alias = spec.partition("=")
+        keys = [name.strip()] + [k.strip() for k in alias.split("|") if k.strip()]
+        hit = [d for d in docs if any(k in d["text"] or k in d["title"] for k in keys)]
+        rows.append({"name": name.strip(), "count": len(hit), "times": sum(d["text"].count(k) for d in hit for k in keys),
+                     "videos": [d["id"] for d in hit]})
+    return sorted(rows, key=lambda r: (-r["count"], -r["times"]))
+
+
+def grep(docs: list, words: list, width: int = 40, limit: int = 40, per_doc: int = 4) -> list:
+    """找关键词，返回前后各 width 字的原文。words 靠前的优先；同一视频同一个词最多 per_doc 条，相近片段去重。"""
+    rank = {w: i for i, w in enumerate(words)}
+    pat = re.compile("|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)))
+    cands = []
+    for d in docs:
+        cnt = {}
+        for m in pat.finditer(d["text"]):
+            w = m.group(0)
+            if cnt.get(w, 0) >= per_doc:
+                continue
+            cnt[w] = cnt.get(w, 0) + 1
+            snip = d["text"][max(0, m.start() - width):m.end() + width].replace("\n", " ")
+            cands.append((rank[w], -(d.get("views") or 0), m.start(),
+                          {"word": w, "text": snip, "video": d["id"], "title": d["title"][:24]}))
+    hits, seen = [], []
+    for *_, h in sorted(cands, key=lambda x: x[:3]):
+        core = re.sub(r"\W", "", h["text"])
+        if any(core[len(core) // 3: len(core) // 3 + 12] in o for o in seen):  # 和已选片段重叠
+            continue
+        seen.append(core)
+        hits.append(h)
+        if len(hits) >= limit:
+            break
+    return hits

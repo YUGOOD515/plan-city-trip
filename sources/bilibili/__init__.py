@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import urllib.parse
 import urllib.request
 
@@ -103,14 +104,19 @@ def _run(args, on_line=None):
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
     p = subprocess.Popen([sys.executable, SCRIPT, *args, "--cookie-file", COOKIE_FILE],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", env=env)
+    # stdout 放到线程里读：结果 JSON 大于管道缓冲（Windows 约 4KB）时，只读 stderr 会让子进程卡在写 stdout 上
+    buf = []
+    reader = threading.Thread(target=lambda: buf.append(p.stdout.read()), daemon=True)
+    reader.start()
     err_lines = []
     for line in p.stderr:
         line = line.rstrip()
         err_lines.append(line)
         if on_line:
             on_line(line)
-    out = p.stdout.read()
     p.wait()
+    reader.join()
+    out = buf[0] if buf else ""
     if p.returncode != 0:
         raise RuntimeError("\n".join(err_lines[-5:]) or f"bili_sub.py 退出码 {p.returncode}")
     return json.loads(out.strip().splitlines()[-1]) if out.strip() else []
